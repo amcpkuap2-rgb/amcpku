@@ -1,29 +1,60 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AMC PKU Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <!-- Load Supabase library FIRST -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Initialize Supabase client immediately and expose to window -->
+    <script>
+        // Konfigurasi Supabase
+        const SUPABASE_URL = 'https://voqvauapafsdcmuswsnq.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ' +
+            'SIsInJlZiI6InZvcXZhdWFwYWZzZGNtdXN3c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE' +
+            '3NjYxNDMxNTYsImV4cCI6MjA4MTcxOTE1Nn0.IJG7ofqfc4Qy44KlbTDGzo4OoQwO0xTXU' +
+            'wKPt04kRnI';
+
+        // Create and expose supabaseClient to window scope IMMEDIATELY
+        // This ensures logic.js logout function can access it
+        if (typeof window.supabase !== 'undefined') {
+            const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            window.supabaseClient = supabaseClient;
+            console.log('Supabase client initialized and exposed to window (logbook)');
+        } else {
+            console.error('Supabase library not loaded!');
+        }
+    </script>
+    
+    <!-- Load logic.js AFTER Supabase client is initialized -->
+    <script src="assets/logic.js"></script>
     <style>
        .hidden { display: none; }
         .form-check-input { cursor: pointer; border: 1px solid #0d6efd; }
         
         /* Sidebar Styles */
         #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
             min-width: 250px;
             max-width: 250px;
             background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%);
             color: #fff;
-            transition: all 0.3s;
+            transition: left 0.3s ease, transform 0.3s ease;
             min-height: 100vh;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transform: translateX(0);
         }
         
         #sidebar.active {
-            margin-left: -250px;
+            left: -250px !important;
+            transform: translateX(-250px) !important;
         }
         
         #sidebar .sidebar-header {
@@ -62,16 +93,21 @@
         }
         
         #content {
-            width: 100%;
+            margin-left: 250px;
+            width: calc(100% - 250px);
             padding: 20px;
             min-height: 100vh;
-            transition: all 0.3s;
+            transition: margin-left 0.3s ease, width 0.3s ease;
+        }
+        
+        #sidebar.active ~ #content {
+            margin-left: 0 !important;
+            width: 100% !important;
         }
         
         .wrapper {
-            display: flex;
             width: 100%;
-            align-items: stretch;
+            position: relative;
         }
         
         #sidebarCollapse {
@@ -143,7 +179,7 @@
                 </a>
             </li>
              <li>
-                <a href="#" onclick="logout()">
+                <a href="#" onclick="logout(); return false;">
                     <i class="bi bi-box-arrow-right"></i> Logout
                 </a>
             </li>
@@ -156,7 +192,7 @@
 
     <!-- Page Content -->
     <div id="content">
-        <button type="button" id="sidebarCollapse" class="btn mb-3">
+        <button type="button" id="sidebarCollapse" class="btn mb-3" onclick="toggleSidebar()">
             <i class="bi bi-list"></i> Toggle Menu
         </button>
 
@@ -261,10 +297,26 @@
 </div>
 
 <script>
+// ==========================================
+// SIDEBAR TOGGLE - MUST BE FIRST!
+// ==========================================
+window.toggleSidebar = function() {
+    console.log('toggleSidebar called');
+    const sidebar = document.getElementById('sidebar');
+    const content = document.getElementById('content');
+    
+    if (sidebar && content) {
+        sidebar.classList.toggle('active');
+        console.log('Sidebar toggled, active:', sidebar.classList.contains('active'));
+    } else {
+        console.error('Sidebar or content element not found!');
+        console.log('Sidebar:', sidebar);
+        console.log('Content:', content);
+    }
+};
 
-const SUPABASE_URL = 'https://voqvauapafsdcmuswsnq.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvcXZhdWFwYWZzZGNtdXN3c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNDMxNTYsImV4cCI6MjA4MTcxOTE1Nn0.IJG7ofqfc4Qy44KlbTDGzo4OoQwO0xTXUwKPt04kRnI';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Use the globally initialized supabaseClient from window scope
+const supabaseClient = window.supabaseClient;
 
 function showHome() {
     var homePage = document.getElementById('homePage');
@@ -286,25 +338,20 @@ function showForm() {
     document.getElementById('staffList').innerHTML = '';
 }
 
-function hideSelect() {
-    document.getElementById('staffSelect').style.display = 'none';
-}
-
 function addStaffRow() {
     var staffList = document.getElementById('staffList');
     var select = document.createElement('select');
     select.className = 'form-select mb-2 staff-select';
     select.required = true;
-    select.innerHTML = `
-        <option value="">-- Pilih Petugas --</option>
-        <option value="Yeffi Suwono Putra">Yeffi S.Putra</option>
-        <option value="Muhammad Abduh">Muhammad Abduh</option>
-        <option value="Rangga Swardani Abadi">Rangga SWA</option>
-        <option value="Herdin Jonathan Sibarani">Herdin Jo</option>
-        <option value="Febri Antoni">Febri Antoni</option>
-        <option value="Febriko Dwi Fatmi">Febriko DF</option>
-        <option value="Andi Duriamin Siregar">Andi DS</option>  
-    `;
+    var options = '<option value="">-- Pilih Petugas --</option>';
+    options += '<option value="Yeffi Suwono Putra">Yeffi S.Putra</option>';
+    options += '<option value="Muhammad Abduh">Muhammad Abduh</option>';
+    options += '<option value="Rangga Swardani Abadi">Rangga SWA</option>';
+    options += '<option value="Herdin Jonathan Sibarani">Herdin Jo</option>';
+    options += '<option value="Febri Antoni">Febri Antoni</option>';
+    options += '<option value="Febriko Dwi Fatmi">Febriko DF</option>';
+    options += '<option value="Andi Duriamin Siregar">Andi DS</option>';
+    select.innerHTML = options;
     staffList.appendChild(select);
 }
 
@@ -471,14 +518,6 @@ function fetchForPrint() {
     });
 }
 
-function logout() {
-    window.location.href = 'index.html';
-}
-
-// Wait for Supabase to load
-setTimeout(function() {
-    showHome();
-}, 500);
 
 // Fungsi untuk set active menu
 function setActiveMenu(element) {
@@ -490,21 +529,48 @@ function setActiveMenu(element) {
     element.classList.add('active');
 }
 
-// Toggle sidebar
+// Expose logout function locally if not already available from logic.js
+if (typeof window.logout === 'undefined') {
+    window.logout = async function() {
+        const confirmLogout = confirm('Apakah Anda yakin ingin keluar dari sistem?');
+        if (!confirmLogout) return false;
+        
+        try {
+            sessionStorage.clear();
+            localStorage.clear();
+            
+            if (window.supabaseClient && window.supabaseClient.auth) {
+                await window.supabaseClient.auth.signOut();
+            }
+            
+            window.location.href = 'index.html';
+            return true;
+        } catch (error) {
+            console.error('Logout error:', error);
+            sessionStorage.clear();
+            localStorage.clear();
+            window.location.href = 'index.html';
+            return true;
+        }
+    };
+}
+
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    showHome();
+    console.log('DOM Content Loaded');
     
-    // Sidebar toggle functionality
-    const sidebarCollapse = document.getElementById('sidebarCollapse');
-    const sidebar = document.getElementById('sidebar');
-    
-    if (sidebarCollapse) {
-        sidebarCollapse.addEventListener('click', function() {
-            sidebar.classList.toggle('active');
-        });
+    // Ensure logout function is available
+    if (typeof window.logout === 'undefined' && typeof logout !== 'undefined') {
+        window.logout = logout;
     }
+    
+    // Wait for Supabase to load before showing home
+    setTimeout(function() {
+        showHome();
+    }, 500);
 });
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
