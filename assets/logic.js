@@ -6,12 +6,12 @@ const SUPABASE_URL = 'https://voqvauapafsdcmuswsnq.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvcXZhdWFwYWZzZGNtdXN3c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNDMxNTYsImV4cCI6MjA4MTcxOTE1Nn0.IJG7ofqfc4Qy44KlbTDGzo4OoQwO0xTXUwKPt04kRnI';
 
 // Cek apakah library sudah load
-if (typeof supabase === 'undefined') {
+if (typeof window.supabase === 'undefined') {
     alert("CRITICAL ERROR: Library Supabase gagal dimuat. Cek koneksi internet atau script tag di HTML.");
 }
 
 // Inisialisasi Client (Gunakan nama variabel '_sb' agar tidak bentrok dengan library global)
-const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ==========================================
 // 2. KONFIGURASI & BANK SOAL
@@ -354,11 +354,107 @@ async function resetSystem() {
 }
 
 // ==========================================
-// 6. AUTO RUN (INIT)
+// 6. FUNGSI LOGOUT (CENTRALIZED)
+// ==========================================
+
+/**
+ * Fungsi logout yang terpusat untuk semua halaman
+ * Membersihkan session storage dan melakukan sign out dari Supabase
+ */
+async function logout() {
+    // Konfirmasi sebelum logout
+    const confirmLogout = confirm('Apakah Anda yakin ingin keluar dari sistem?');
+    
+    if (!confirmLogout) {
+        return false; // User membatalkan logout
+    }
+
+    try {
+        console.log('Starting logout process...');
+        
+        // Bersihkan session storage (untuk data exam)
+        sessionStorage.clear();
+        
+        // Bersihkan local storage juga (jika ada)
+        localStorage.clear();
+        
+        console.log('Storage cleared');
+        
+        // Sign out dari Supabase
+        // Prioritas: cek window.supabaseClient yang diexpose dari HTML pages
+        let client = null;
+        
+        if (typeof window.supabaseClient !== 'undefined' && window.supabaseClient) {
+            client = window.supabaseClient;
+            console.log('Using window.supabaseClient');
+        } else if (typeof _sb !== 'undefined' && _sb) {
+            client = _sb;
+            console.log('Using _sb');
+        } else if (typeof window.supabase !== 'undefined') {
+            // Fallback: buat client baru jika belum ada
+            client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            console.log('Created new client');
+        }
+        
+        if (client && client.auth) {
+            console.log('Signing out from Supabase...');
+            const { error } = await client.auth.signOut();
+            
+            if (error) {
+                console.warn('Logout warning:', error.message);
+                // Tidak throw error, tetap lanjut redirect
+            } else {
+                console.log('Supabase signout successful');
+            }
+        } else {
+            console.warn('No Supabase client found, skipping auth signout');
+        }
+        
+        // Tampilkan pesan logout berhasil
+        console.log('Redirecting to login page...');
+        
+        // Redirect ke halaman login
+        window.location.href = 'index.html';
+        
+        return true;
+        
+    } catch (error) {
+        console.error('Logout error:', error);
+        
+        // Tetap redirect meskipun ada error
+        // Bersihkan semua storage
+        try {
+            sessionStorage.clear();
+            localStorage.clear();
+        } catch (e) {
+            console.error('Error clearing storage:', e);
+        }
+        
+        // Paksa redirect
+        alert('Logout berhasil. Anda akan diarahkan ke halaman login.');
+        window.location.href = 'index.html';
+        
+        return true;
+    }
+}
+
+// Expose logout function to global scope IMMEDIATELY (not inside DOMContentLoaded)
+if (typeof window !== 'undefined') {
+    window.logout = logout;
+    console.log('Logout function exposed to window scope');
+}
+
+// ==========================================
+// 7. AUTO RUN (INIT)
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Cek kita ada di halaman mana
-    if (document.getElementById('request-table-body')) {
+    // Expose logout again to ensure it's available
+    window.logout = logout;
+    console.log('DOMContentLoaded: Logout function re-exposed');
+    
+    // Cek kita ada di halaman mana - hanya jalankan jika element ada
+    const requestTableBody = document.getElementById('request-table-body');
+    if (requestTableBody) {
         // Admin Page: Load data & Auto Refresh tiap 5 detik
         loadAdminData();
         setInterval(loadAdminData, 5000);
@@ -366,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Cek session untuk Peserta (kalau refresh halaman tidak hilang stepnya - Opsional)
     const myId = sessionStorage.getItem('mySessionId');
-    if (myId && document.getElementById('step-register')) {
+    const stepRegister = document.getElementById('step-register');
+    if (myId && stepRegister) {
         // Logic bisa dikembangkan disini untuk restore state (misal langsung ke step ticket)
         // Untuk sekarang biarkan default
     }
